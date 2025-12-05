@@ -93,9 +93,10 @@ def test_clas(dataloader, model, device):
     test_labels = np.array([])
     model.eval()
     with torch.no_grad():
-        for X, y in dataloader:
+        for X in dataloader:
 
-            X, y =  X.to(device), y.to(device)
+            X = X[0]
+            X = X.to(device)
             pred = model(X)
             test_labels = np.append( test_labels , pred.squeeze(1).cpu().numpy() )
             
