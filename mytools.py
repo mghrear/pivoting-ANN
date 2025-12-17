@@ -1,4 +1,7 @@
-import torch
+import torch 
+from torch import nn, optim
+import torch.nn.functional as F
+from torch.utils.data import TensorDataset, DataLoader
 import numpy as np
 import pandas as pd
 
@@ -430,3 +433,51 @@ def get_diff_score(x1,x2):
     diff_score = np.mean( np.abs( N2/np.sum(N) - M2/np.sum(M) ) / np.sqrt( ( np.sqrt(N2)/np.sum(N) )**2 + ( np.sqrt(M2)/np.sum(M) )**2 ) )
 
     return diff_score
+
+
+# simple MLP for binary classification (single logit output)
+class Classifier(nn.Module):
+    def __init__(self, in_features, hidden1=264, hidden2=264, hidden3=128, hidden4=128, hidden5=64):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Linear(in_features, hidden1,bias=False),
+            nn.BatchNorm1d(hidden1),
+            nn.ReLU(),
+            nn.Linear(hidden1, hidden2,bias=False),
+            nn.BatchNorm1d(hidden2),
+            nn.ReLU(),
+            nn.Linear(hidden2, hidden3,bias=False),
+            nn.BatchNorm1d(hidden3),
+            nn.ReLU(),
+            nn.Linear(hidden3, hidden4,bias=False),
+            nn.BatchNorm1d(hidden4),
+            nn.ReLU(),
+            nn.Linear(hidden4, hidden5,bias=False),
+            nn.BatchNorm1d(hidden5),
+            nn.ReLU(),
+            nn.Linear(hidden5, 1),
+        )
+    def forward(self, x):
+        return self.net(x)
+    
+
+class Adversary(nn.Module):
+    def __init__(self, n_classes, input_dim=1, hidden1=64, hidden2=128, hidden3=64):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Linear(input_dim, hidden1,bias=False),
+            nn.BatchNorm1d(hidden1),
+            nn.ReLU(),
+            nn.Linear(hidden1, hidden2,bias=False),
+            nn.BatchNorm1d(hidden2),
+            nn.ReLU(),
+            nn.Linear(hidden2, hidden3,bias=False),
+            nn.BatchNorm1d(hidden3),
+            nn.ReLU(),
+            nn.Linear(hidden3, n_classes)   # outputs raw logits for CrossEntropyLoss
+            )
+        
+    def forward(self, x):
+        # make the shape (N,1) in a way that is robust for squeezed / unsqueezed classifier outputs
+        x = x.view(x.size(0), -1)
+        return self.net(x)  # returns shape (N, n_classes)
