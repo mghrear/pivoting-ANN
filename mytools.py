@@ -481,3 +481,33 @@ class Adversary(nn.Module):
         # make the shape (N,1) in a way that is robust for squeezed / unsqueezed classifier outputs
         x = x.view(x.size(0), -1)
         return self.net(x)  # returns shape (N, n_classes)
+    
+
+
+# simple MLP for binary classification (single logit output)
+class Classifier_2021(nn.Module):
+    def __init__(self, in_features, hidden1=264, hidden2=264, hidden3=128, hidden4=128, hidden5=128, hidden6=64):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Linear(in_features, hidden1,bias=False),
+            nn.BatchNorm1d(hidden1),
+            nn.ReLU(),
+            nn.Linear(hidden1, hidden2,bias=False),
+            nn.BatchNorm1d(hidden2),
+            nn.ReLU(),
+            nn.Linear(hidden2, hidden3,bias=False),
+            nn.BatchNorm1d(hidden3),
+            nn.ReLU(),
+            nn.Linear(hidden3, hidden4,bias=False),
+            nn.BatchNorm1d(hidden4),
+            nn.ReLU(),
+            nn.Linear(hidden4, hidden5,bias=False),
+            nn.BatchNorm1d(hidden5),
+            nn.ReLU(),
+            nn.Linear(hidden5, hidden6,bias=False),
+            nn.BatchNorm1d(hidden6),
+            nn.ReLU(),
+            nn.Linear(hidden6, 1),
+        )
+    def forward(self, x):
+        return self.net(x)
