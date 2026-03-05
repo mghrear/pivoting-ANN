@@ -526,3 +526,22 @@ class Classifier_2021(nn.Module):
         )
     def forward(self, x):
         return self.net(x)
+    
+
+
+QualCuts = {
+    'pos_E_Ecal_low': 0.5,
+    'pos_Pz_low': 0.65,
+    'pos_Px_low': -0.06,
+    'pos_Py_low': -0.12,
+    'pos_Py_high': 0.13,
+    'ele_Px_low': -0.12,
+    'ele_Py_low': -0.14,
+    'ele_Py_high': 0.16,
+    'pos_Ecal_x_low': 100.0,
+    'pos_Ecal_y_low': -85.0,
+    'pos_Ecal_y_high': 90.0,
+    'pos_Ecal_z_low': 1448.6,
+    'ele_Ecal_x_high': 10.0,
+    'ele_Ecal_z_low': 1448.6
+}

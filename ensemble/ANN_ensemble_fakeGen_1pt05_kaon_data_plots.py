@@ -17,7 +17,7 @@ import re
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print("Using device:", device)
 
-data_dir = '/Users/mghrear/data/HPS_data/ensemble_FakeGen_1pt05_kaon/'
+data_dir = '/Users/mghrear/data/HPS_data/ensemble_FakeGen_1pt05_kaon_QualCuts/'
 
 for p in Path(data_dir).iterdir():
 
@@ -39,6 +39,6 @@ for p in Path(data_dir).iterdir():
     plt.axvline(1019.461, color='k', linestyle='dashed', linewidth=1, label='PDG phi mass')
     plt.axvline(1050.0, color='r', linestyle='dashed', linewidth=1, label='Fake mass')
     plt.legend()
-    plt.savefig('/Users/mghrear/Desktop/Ensemble_study/original_1pt05_kaon/data_plots/'+str(run_number)+'.png')
+    plt.savefig('/Users/mghrear/Desktop/Ensemble_study/original_1pt05_kaon_QualCuts/data_plots/'+str(run_number)+'.png')
 
 

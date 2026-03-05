@@ -52,12 +52,13 @@ for seed in np.arange(100)+5:
     seed_everything(int(seed))
 
     # Read tritrig, wab, phiKK, and data files
-    df_tritrig = pd.read_pickle('/Users/mghrear/data/ML_data/patch/2021_v9_pass5_tritrig_limited.pk')
+    df_tritrig = pd.read_pickle('/Users/mghrear/data/ML_data/patch/2021_v9_pass5_tritrig_QualCuts.pk')
     df_tritrig['PhiKK'] = 0.0
-    df_phiKK = pd.read_pickle('/Users/mghrear/data/ML_data/patch/2021_v9_pass5_FakeGen_1pt05_kaon_limited.pk')
+    df_phiKK = pd.read_pickle('/Users/mghrear/data/ML_data/patch/2021_v9_pass5_FakeGen_1pt05_kaon_QualCuts.pk')
     df_phiKK['PhiKK'] = 1.0
-    df_wab = pd.read_pickle('/Users/mghrear/data/ML_data/patch/2021_v9_pass5_wab_limited.pk')
+    df_wab = pd.read_pickle('/Users/mghrear/data/ML_data/patch/2021_v9_pass5_wab_QualCuts.pk')
     df_wab['PhiKK'] = 0.0 # Add label
+
 
     print("tritrig: ", len(df_tritrig))
     print("phiKK: ", len(df_phiKK))
@@ -231,4 +232,4 @@ for seed in np.arange(100)+5:
             final_clas_adv = copy.deepcopy(final_classifier)
             final_adv_adv = copy.deepcopy(final_adv)
 
-    torch.save(final_clas_adv.state_dict(), "/Users/mghrear/data/ML_data/patch/ensemble_FakeGen_1pt05_kaon/classifier_adv_2021_v9_pass5_run"+str(seed)+"_limited.pt")
+    torch.save(final_clas_adv.state_dict(), "/Users/mghrear/data/ML_data/patch/ensemble_FakeGen_1pt05_kaon_QualCuts/classifier_adv_2021_v9_pass5_run"+str(seed)+"_limited.pt")
