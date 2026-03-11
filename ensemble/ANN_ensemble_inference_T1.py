@@ -21,12 +21,12 @@ print("Using device:", device)
 
 # Apply to MC to determine a selection that removes 99% of background
 
-# Read tritrig, wab, phiKK, and data files
-df_tritrig = pd.read_pickle('/Users/mghrear/data/ML_data/patch/2021_v9_pass5_tritrig_QualCuts.pk')
+# Load MC data
+df_tritrig = pd.read_pickle('/Users/mghrear/data/ML_data/patch/2021_v9_pass5_tritrig_limited.pk')
 df_tritrig['PhiKK'] = 0.0
-df_phiKK = pd.read_pickle('/Users/mghrear/data/ML_data/patch/2021_v9_pass5_phiKK_QualCuts.pk')
+df_phiKK = pd.read_pickle('/Users/mghrear/data/ML_data/patch/2021_v9_pass5_phiKK_limited.pk')
 df_phiKK['PhiKK'] = 1.0
-df_wab = pd.read_pickle('/Users/mghrear/data/ML_data/patch/2021_v9_pass5_wab_QualCuts.pk')
+df_wab = pd.read_pickle('/Users/mghrear/data/ML_data/patch/2021_v9_pass5_wab_limited.pk')
 df_wab['PhiKK'] = 0.0 # Add label
 
 
@@ -53,7 +53,7 @@ test_dataset = TensorDataset(torch.from_numpy(X_test.to_numpy().astype(np.float3
 test_loader = DataLoader(test_dataset, batch_size=2000, shuffle=False)
 
 
-model_dir = '/Users/mghrear/data/ML_data/patch/ensemble_QualCuts_2/'
+model_dir = '/Users/mghrear/data/ML_data/patch/ensemble/'
 
 ANN_slections = []
 run_numbers = []
@@ -98,7 +98,7 @@ for p in Path(model_dir).iterdir():
     plt.xlabel('Invariant Mass [MeV]')
     plt.ylabel('Normalized Counts')
     plt.legend()
-    plt.savefig(f'/Users/mghrear/Desktop/Ensemble_study/original_QualCuts/MC_plots_2/ANN_ensemble_run{run_number}_mc_invmass.png')
+    plt.savefig(f'/Users/mghrear/Desktop/Ensemble_study/original_QualCuts/MC_plots/ANN_ensemble_run{run_number}_mc_invmass.png')
 
 
 # make pandas dataframe to store run numbers and selections
@@ -109,7 +109,7 @@ df_ANN_selections = pd.DataFrame({'run_number': run_numbers, 'ANN_selection': AN
 
 
 data_dir = '/Users/mghrear/data/HPS_data/2021_v9_pass5_processed/'
-out_dir = '/Users/mghrear/data/HPS_data/ensemble_QualCuts_2/'
+out_dir = '/Users/mghrear/data/HPS_data/ensemble_QualCuts_T1/'
 
 def getmask(df, QualCuts):
     mask = (
@@ -154,7 +154,7 @@ for index, row in df_ANN_selections.iterrows():
 
     # Load the correspinding model
     ANN = mytools.Classifier(in_features=X_test.shape[1]).to(device)
-    ANN.load_state_dict(torch.load( '/Users/mghrear/data/ML_data/patch/ensemble_QualCuts_2/classifier_adv_2021_v9_pass5_run'+str(run_number)+'_limited.pt' , map_location=device))
+    ANN.load_state_dict(torch.load( '/Users/mghrear/data/ML_data/patch/ensemble/classifier_adv_2021_v9_pass5_run'+str(run_number)+'_limited.pt' , map_location=device))
     ANN.eval()
 
     model_preds = np.array([])

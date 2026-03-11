@@ -46,7 +46,7 @@ def full_loss(output_clas, output_adv, target_clas, target_adv, w, lambda_):
 
     return loss
 
-for seed in np.arange(100)+5:
+for seed in np.arange(100)+105:
 
     print("Starting run with seed: ", seed)
     seed_everything(int(seed))
@@ -231,4 +231,4 @@ for seed in np.arange(100)+5:
             final_clas_adv = copy.deepcopy(final_classifier)
             final_adv_adv = copy.deepcopy(final_adv)
 
-    torch.save(final_clas_adv.state_dict(), "/Users/mghrear/data/ML_data/patch/ensemble_QualCuts/classifier_adv_2021_v9_pass5_run"+str(seed)+"_limited.pt")
+    torch.save(final_clas_adv.state_dict(), "/Users/mghrear/data/ML_data/patch/ensemble_QualCuts_2/classifier_adv_2021_v9_pass5_run"+str(seed)+"_limited.pt")

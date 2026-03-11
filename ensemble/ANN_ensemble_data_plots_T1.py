@@ -17,7 +17,7 @@ import re
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print("Using device:", device)
 
-data_dir = '/Users/mghrear/data/HPS_data/ensemble_NHP1_QualCuts/'
+data_dir = '/Users/mghrear/data/HPS_data/ensemble_QualCuts_T1/'
 
 for p in Path(data_dir).iterdir():
 
@@ -26,6 +26,8 @@ for p in Path(data_dir).iterdir():
 
     df = pd.read_pickle(data_dir + p.name)
 
+    #df = df.loc[df.pos_E_Ecal > 0.6]
+
     plt.figure()
 
     for num in [400000,200000,100000,50000]:
@@ -33,9 +35,8 @@ for p in Path(data_dir).iterdir():
         plt.hist(df_cut.InvM*1000, bins=np.arange(980,1250,1), histtype='step', label=str(num), density=False)
         plt.xlabel('Invariant Mass (MeV)')
         plt.ylabel('Normalized Entries')
-    
     plt.axvline(1019.461, color='k', linestyle='dashed', linewidth=1, label='PDG phi mass')
     plt.legend()
-    plt.savefig('/Users/mghrear/Desktop/Ensemble_study/NHP1_QualCuts/data_plots/'+str(run_number)+'.png')
+    plt.savefig('/Users/mghrear/Desktop/Ensemble_study/original_QualCuts/data_plots_T1/'+str(run_number)+'.png')
 
 

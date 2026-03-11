@@ -26,9 +26,6 @@ for p in Path(data_dir).iterdir():
 
     df = pd.read_pickle(data_dir + p.name)
 
-    # Add positron cluster energy filter
-    df = df.loc[df.pos_E_Ecal > 0.6]
-
     plt.figure()
 
     for num in [400000,200000,100000,50000]:

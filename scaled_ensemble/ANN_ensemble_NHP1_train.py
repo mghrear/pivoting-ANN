@@ -10,17 +10,33 @@ from sklearn.model_selection import train_test_split
 import copy
 import mytools
 import os, random
-
-
+from sklearn.preprocessing import StandardScaler
+import joblib
 # Print and store device being used
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print("Using device:", device)
 
-# Number of class in invariant mass used by the adversary
-Num_classes = 5
-# Hyper-parameter for adversarial training of the classifier
-lambda_ = 100.0
 
+FakeGen = True
+QualCuts = True
+
+if FakeGen:
+    str1 = 'FakeGen_1pt05_kaon'
+else:
+    str1 = 'phiKK'
+
+if QualCuts:
+    str2 = '_QualCuts'
+else:
+    str2 = '_limited'
+
+out_dir = '/Users/mghrear/data/ML_data/patch/scaled/ensemble_NHP1'+str2+'_'+str1+'/'
+out_dir_early = '/Users/mghrear/data/ML_data/patch/scaled/ensemble_NHP1_early'+str2+'_'+str1+'/'
+
+# Number of class in invariant mass used by the adversary
+Num_classes = 10
+# Hyper-parameter for adversarial training of the classifier
+lambda_ = 1.0
 # batch size
 bsize = 2000
 
@@ -46,19 +62,18 @@ def full_loss(output_clas, output_adv, target_clas, target_adv, w, lambda_):
 
     return loss
 
-for seed in np.arange(100)+105:
+for seed in np.arange(100)+5:
 
     print("Starting run with seed: ", seed)
     seed_everything(int(seed))
 
-    # Read tritrig, wab, phiKK, and data files
-    df_tritrig = pd.read_pickle('/Users/mghrear/data/ML_data/patch/2021_v9_pass5_tritrig_QualCuts.pk')
+    # Read MC tritrig, wab, phiKK, and data files
+    df_tritrig = pd.read_pickle('/Users/mghrear/data/ML_data/patch/2021_v9_pass5_tritrig'+str2+'.pk')
     df_tritrig['PhiKK'] = 0.0
-    df_phiKK = pd.read_pickle('/Users/mghrear/data/ML_data/patch/2021_v9_pass5_FakeGen_1pt05_kaon_QualCuts.pk')
+    df_phiKK = pd.read_pickle('/Users/mghrear/data/ML_data/patch/2021_v9_pass5_'+str1+str2+'.pk')
     df_phiKK['PhiKK'] = 1.0
-    df_wab = pd.read_pickle('/Users/mghrear/data/ML_data/patch/2021_v9_pass5_wab_QualCuts.pk')
+    df_wab = pd.read_pickle('/Users/mghrear/data/ML_data/patch/2021_v9_pass5_wab'+str2+'.pk')
     df_wab['PhiKK'] = 0.0 # Add label
-
 
     print("tritrig: ", len(df_tritrig))
     print("phiKK: ", len(df_phiKK))
@@ -105,7 +120,12 @@ for seed in np.arange(100)+105:
     y_test = df_test['PhiKK']
     y_adv_test = mytools.get_adv_labels( mytools.get_InvM(df_test), one_hot_edges)
 
-    df_test["InvM"] = mytools.get_InvM(df_test) 
+    df_test["InvM"] = mytools.get_InvM(df_test)
+
+    scaler = StandardScaler()
+    X_train = pd.DataFrame(scaler.fit_transform(X_train), columns=X_train.columns, index=X_train.index)
+    X_val   = pd.DataFrame(scaler.transform(X_val),       columns=X_val.columns,   index=X_val.index)
+    X_test  = pd.DataFrame(scaler.transform(X_test),      columns=X_test.columns,  index=X_test.index)
 
     # Convert to tensor dataset and dataloader
     train_dataset = TensorDataset(torch.from_numpy(X_train.to_numpy().astype(np.float32))  , torch.from_numpy(y_train.to_numpy().astype(np.float32)).unsqueeze(1)  )
@@ -119,18 +139,17 @@ for seed in np.arange(100)+105:
 
     clas = mytools.Classifier(in_features=X_train.shape[1]).to(device)
     criterion_clas = nn.BCEWithLogitsLoss()
-    optimizer_clas = optim.Adam(clas.parameters(), lr=1e-5)
-    scheduler_clas = torch.optim.lr_scheduler.ExponentialLR(optimizer_clas, gamma=0.9999)
+    optimizer_clas = optim.Adam(clas.parameters(), lr=1e-2)
+    scheduler_clas = torch.optim.lr_scheduler.ExponentialLR(optimizer_clas, gamma=1.0)
 
     # Implement early stopping in training loop
     # Stop if validation loss has not decreased for the last [patience] epochs
     # The model with the lowest loss is stored
-    patience = 10
 
     Training_losses = np.array([])
     Validation_losses = np.array([])
 
-    epochs = 2500
+    epochs = 100
     for t in range(epochs):
         print(f"Epoch {t+1}\n-------------------------------")
         
@@ -141,15 +160,11 @@ for seed in np.arange(100)+105:
         if Validation_losses[-1] == np.min(Validation_losses):
             final_classifier = copy.deepcopy(clas)
         
-        if len(Validation_losses) > patience:
-            if np.sum((Validation_losses[-1*np.arange(patience)-1] - Validation_losses[-1*np.arange(patience)-2]) < 0) == 0:
-                print("Stopping early!")
-                break
                 
-    adv = mytools.Adversary(n_classes=Num_classes).to(device)
+    adv = mytools.Adversary_small(n_classes=Num_classes).to(device)
     criterion_adv = nn.CrossEntropyLoss(reduction='none')  # returns loss per sample so we can weight it
-    opt_adv = torch.optim.Adam(adv.parameters(), lr=1e-5)
-    scheduler_adv = torch.optim.lr_scheduler.ExponentialLR(opt_adv, gamma=0.999)
+    opt_adv = torch.optim.Adam(adv.parameters(), lr=1e-2)
+    scheduler_adv = torch.optim.lr_scheduler.ExponentialLR(opt_adv, gamma=1.0)
 
     train_adv_dataset = TensorDataset(torch.from_numpy(X_train.to_numpy() .astype(np.float32))  , torch.from_numpy(y_adv_train), (torch.from_numpy(y_train.to_numpy().astype(np.float32))==0).float())
     train_adv_loader = DataLoader(train_adv_dataset, batch_size=bsize, shuffle=True)
@@ -161,7 +176,6 @@ for seed in np.arange(100)+105:
     test_adv_dataset = TensorDataset(torch.from_numpy(X_test.to_numpy() .astype(np.float32))  , torch.from_numpy(y_adv_test))
     test_adv_loader = DataLoader(test_adv_dataset, batch_size=bsize, shuffle=True)
 
-    patience = 6
 
     Training_losses = np.array([])
     Validation_losses = np.array([])
@@ -177,10 +191,6 @@ for seed in np.arange(100)+105:
         if Validation_losses[-1] == np.min(Validation_losses):
             final_adv = copy.deepcopy(adv)
         
-        if len(Validation_losses) > patience:
-            if np.sum((Validation_losses[-1*np.arange(patience)-1] - Validation_losses[-1*np.arange(patience)-2]) < 0) == 0:
-                print("Stopping early!")
-                break
 
     train_full_dataset = TensorDataset(torch.from_numpy(X_train.to_numpy().astype(np.float32))  , torch.from_numpy(y_train.to_numpy().astype(np.float32)).unsqueeze(1), torch.from_numpy(y_adv_train),  (torch.from_numpy(y_train.to_numpy().astype(np.float32))==0).float())
     train_full_loader = DataLoader(train_full_dataset, batch_size=bsize, shuffle=True)
@@ -191,11 +201,12 @@ for seed in np.arange(100)+105:
     BCE_loss = nn.BCEWithLogitsLoss()
     CE_loss = nn.CrossEntropyLoss(reduction='none') # returns loss per sample so we can weight it
     
-    optimizer_clas = optim.Adam(final_classifier.parameters(), lr=1e-7,betas=(0.5, 0.999))
-    optimizer_adv = optim.Adam(final_adv.parameters(), lr=1e-5,betas=(0.5, 0.999))
+    optimizer_clas = optim.Adam(final_classifier.parameters(), lr=1e-2,betas=(0.9, 0.999))
+    optimizer_adv = optim.Adam(final_adv.parameters(), lr=1e-2,betas=(0.9, 0.999))
 
     scheduler_clas = torch.optim.lr_scheduler.ExponentialLR(optimizer_clas, gamma=0.999)
     scheduler_adv = torch.optim.lr_scheduler.ExponentialLR(optimizer_adv, gamma=0.999)
+
 
     Training_losses_clas = np.array([])
     Training_losses_adv = np.array([])
@@ -207,23 +218,23 @@ for seed in np.arange(100)+105:
     epochs = 50
     for t in range(epochs):
         print(f"Epoch {t+1}\n-------------------------------")
+    
+        # Train adversary and classifier
+        E_clas_training_loss , E_adv_training_loss = mytools.train_full_orig(train_full_loader, final_classifier, final_adv, full_loss, lambda_, criterion_adv, optimizer_clas, optimizer_adv, scheduler_clas, scheduler_adv, 8, device, grad_clip = False)
+        Training_losses_clas = np.append(Training_losses_clas, E_clas_training_loss)
+        Training_losses_adv = np.append(Training_losses_adv, E_adv_training_loss)
 
         # Get validation losses
         E_clas_val_loss, E_adv_val_loss = mytools.validate_full(val_full_loader, final_classifier, final_adv, full_loss, lambda_, criterion_adv, device)
         Validation_losses_clas = np.append(Validation_losses_clas, E_clas_val_loss)
         Validation_losses_adv = np.append(Validation_losses_adv, E_adv_val_loss)
 
-        # Train adversary and classifier
-        E_clas_training_loss , E_adv_training_loss = mytools.train_full(train_full_loader, final_classifier, final_adv, full_loss, lambda_, criterion_adv, optimizer_clas, optimizer_adv, scheduler_clas, scheduler_adv, device)
-        Training_losses_clas = np.append(Training_losses_clas, E_clas_training_loss)
-        Training_losses_adv = np.append(Training_losses_adv, E_adv_training_loss)
-
         # Get the diff_score
         df_test["Class_adv"] = mytools.test_clas(test_loader, final_classifier, device)
         df_bkg = df_test.loc[ (df_test.type == 'tritrig') | (df_test.type == 'wab')]
-        per = np.percentile(df_bkg['Class_adv'],99)
+        per = np.percentile(df_bkg['Class_adv'],90)
         df_cut = df_bkg[df_bkg['Class_adv']>per].reset_index(drop=True)
-        x1 = 1000* df_bkg.InvM.values
+        x1 = 1000*df_bkg.InvM.values
         x2 = 1000*df_cut.InvM.values
         diff_scores = np.append(diff_scores, mytools.get_diff_score(x1,x2) )
 
@@ -232,4 +243,5 @@ for seed in np.arange(100)+105:
             final_clas_adv = copy.deepcopy(final_classifier)
             final_adv_adv = copy.deepcopy(final_adv)
 
-    torch.save(final_clas_adv.state_dict(), "/Users/mghrear/data/ML_data/patch/ensemble_FakeGen_1pt05_kaon_QualCuts_2/classifier_adv_2021_v9_pass5_run"+str(seed)+"_limited.pt")
+    torch.save(final_clas_adv.state_dict(), out_dir_early+"classifier_adv_2021_v9_pass5_run"+str(seed)+"_limited.pt")
+    torch.save(final_classifier.state_dict(), out_dir+"classifier_adv_2021_v9_pass5_run"+str(seed)+"_limited.pt")
