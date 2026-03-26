@@ -17,7 +17,7 @@ import re
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print("Using device:", device)
 
-data_dir = '/Users/mghrear/data/HPS_data/ensemble_QualCuts/'
+data_dir = '/Users/mghrear/data/HPS_data/ensemble_QualCuts_2/'
 
 for p in Path(data_dir).iterdir():
 
@@ -35,6 +35,6 @@ for p in Path(data_dir).iterdir():
         plt.ylabel('Normalized Entries')
     plt.axvline(1019.461, color='k', linestyle='dashed', linewidth=1, label='PDG phi mass')
     plt.legend()
-    plt.savefig('/Users/mghrear/Desktop/Ensemble_study/original_QualCuts/data_plots/'+str(run_number)+'.png')
+    plt.savefig('/Users/mghrear/Desktop/Ensemble_study/original_QualCuts_2/data_plots/'+str(run_number)+'.png')
 
 

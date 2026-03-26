@@ -11,6 +11,8 @@ import copy
 import mytools
 import os, random
 from sklearn.preprocessing import StandardScaler
+from sklearn.impute import SimpleImputer
+from sklearn.pipeline import Pipeline
 import joblib
 # Print and store device being used
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -36,7 +38,7 @@ out_dir_early = '/Users/mghrear/data/ML_data/patch/scaled/ensemble_NHP1_early'+s
 # Number of class in invariant mass used by the adversary
 Num_classes = 10
 # Hyper-parameter for adversarial training of the classifier
-lambda_ = 1.0
+lambda_ = 10.0
 # batch size
 bsize = 2000
 
@@ -122,10 +124,19 @@ for seed in np.arange(100)+5:
 
     df_test["InvM"] = mytools.get_InvM(df_test)
 
-    scaler = StandardScaler()
-    X_train = pd.DataFrame(scaler.fit_transform(X_train), columns=X_train.columns, index=X_train.index)
-    X_val   = pd.DataFrame(scaler.transform(X_val),       columns=X_val.columns,   index=X_val.index)
-    X_test  = pd.DataFrame(scaler.transform(X_test),      columns=X_test.columns,  index=X_test.index)
+    # Replace -9999 sentinel values (missing electron Ecal cluster) with NaN
+    # so they don't corrupt the scaler statistics
+    SENTINEL_COLS = ['ele_Ecal_x', 'ele_Ecal_y', 'ele_Ecal_z']
+    for df in [X_train, X_val, X_test]:
+        df[SENTINEL_COLS] = df[SENTINEL_COLS].replace(-9999.0, np.nan)
+
+    pipeline = Pipeline([
+        ('imputer', SimpleImputer(strategy='mean')),
+        ('scaler',  StandardScaler()),
+    ])
+    X_train = pd.DataFrame(pipeline.fit_transform(X_train), columns=X_train.columns, index=X_train.index)
+    X_val   = pd.DataFrame(pipeline.transform(X_val),       columns=X_val.columns,   index=X_val.index)
+    X_test  = pd.DataFrame(pipeline.transform(X_test),      columns=X_test.columns,  index=X_test.index)
 
     # Convert to tensor dataset and dataloader
     train_dataset = TensorDataset(torch.from_numpy(X_train.to_numpy().astype(np.float32))  , torch.from_numpy(y_train.to_numpy().astype(np.float32)).unsqueeze(1)  )
@@ -201,7 +212,7 @@ for seed in np.arange(100)+5:
     BCE_loss = nn.BCEWithLogitsLoss()
     CE_loss = nn.CrossEntropyLoss(reduction='none') # returns loss per sample so we can weight it
     
-    optimizer_clas = optim.Adam(final_classifier.parameters(), lr=1e-2,betas=(0.9, 0.999))
+    optimizer_clas = optim.Adam(final_classifier.parameters(), lr=1e-3,betas=(0.9, 0.999))
     optimizer_adv = optim.Adam(final_adv.parameters(), lr=1e-2,betas=(0.9, 0.999))
 
     scheduler_clas = torch.optim.lr_scheduler.ExponentialLR(optimizer_clas, gamma=0.999)
@@ -232,7 +243,7 @@ for seed in np.arange(100)+5:
         # Get the diff_score
         df_test["Class_adv"] = mytools.test_clas(test_loader, final_classifier, device)
         df_bkg = df_test.loc[ (df_test.type == 'tritrig') | (df_test.type == 'wab')]
-        per = np.percentile(df_bkg['Class_adv'],90)
+        per = np.percentile(df_bkg['Class_adv'],99)
         df_cut = df_bkg[df_bkg['Class_adv']>per].reset_index(drop=True)
         x1 = 1000*df_bkg.InvM.values
         x2 = 1000*df_cut.InvM.values

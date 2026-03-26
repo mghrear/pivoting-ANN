@@ -13,16 +13,17 @@ from pathlib import Path
 import joblib 
 import re
 from sklearn.preprocessing import StandardScaler
-import joblib
+from sklearn.impute import SimpleImputer
+from sklearn.pipeline import Pipeline
 
 # Print and store device being used
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print("Using device:", device)
 
 
-FakeGen = True
+FakeGen = False
 QualCuts = True
-Early = True
+Early = False
 
 if FakeGen:
     str1 = 'FakeGen_1pt05_kaon'
@@ -91,10 +92,17 @@ y_adv_test = mytools.get_adv_labels( mytools.get_InvM(df_test), one_hot_edges)
 
 df_test["InvM"] = mytools.get_InvM(df_test)
 
-scaler = StandardScaler()
-X_train = pd.DataFrame(scaler.fit_transform(X_train), columns=X_train.columns, index=X_train.index)
-X_val   = pd.DataFrame(scaler.transform(X_val),       columns=X_val.columns,   index=X_val.index)
-X_test  = pd.DataFrame(scaler.transform(X_test),      columns=X_test.columns,  index=X_test.index)
+SENTINEL_COLS = ['ele_Ecal_x', 'ele_Ecal_y', 'ele_Ecal_z']
+for df in [X_train, X_val, X_test]:
+    df[SENTINEL_COLS] = df[SENTINEL_COLS].replace(-9999.0, np.nan)
+
+pipeline = Pipeline([
+    ('imputer', SimpleImputer(strategy='mean')),
+    ('scaler',  StandardScaler()),
+])
+X_train = pd.DataFrame(pipeline.fit_transform(X_train), columns=X_train.columns, index=X_train.index)
+X_val   = pd.DataFrame(pipeline.transform(X_val),       columns=X_val.columns,   index=X_val.index)
+X_test  = pd.DataFrame(pipeline.transform(X_test),      columns=X_test.columns,  index=X_test.index)
 
 test_dataset = TensorDataset(torch.from_numpy(X_test.to_numpy().astype(np.float32)) )
 test_loader = DataLoader(test_dataset, batch_size=2000, shuffle=False)
@@ -167,24 +175,24 @@ if Early:
 else: 
     out_dir = '/Users/mghrear/data/HPS_data/scaled/ensemble_NHP1'+str2+'_'+str1+'/'
 
-def getmask(df, QualCuts):
+def getmask(df, QualCuts_dict):
     mask = (
-        (df['pos_E_Ecal'] > QualCuts['pos_E_Ecal_low'] ) &
-        (df['pos_Pz'] > QualCuts['pos_Pz_low']  ) &
-        (df['pos_Px'] > QualCuts['pos_Px_low']  ) &
-        (df['pos_Py'] > QualCuts['pos_Py_low'] ) & (df['pos_Py'] < QualCuts['pos_Py_high'] ) &
-        (df['ele_Px'] > QualCuts['ele_Px_low'] ) &
-        (df['ele_Py'] > QualCuts['ele_Py_low'] ) & (df['ele_Py'] < QualCuts['ele_Py_high'] ) &
-        (df['pos_Ecal_x'] > QualCuts['pos_Ecal_x_low'] ) &
-        (df['pos_Ecal_y'] > QualCuts['pos_Ecal_y_low'] ) & (df['pos_Ecal_y'] < QualCuts['pos_Ecal_y_high'] ) &
-        (df['pos_Ecal_z'] > QualCuts['pos_Ecal_z_low'] ) &
-        (df['ele_Ecal_x'] < QualCuts['ele_Ecal_x_high'] ) &
-        ((df['ele_Ecal_z'] > QualCuts['ele_Ecal_z_low'] ) | (df['ele_Ecal_z'] < 0))  
+        (df['pos_E_Ecal'] > QualCuts_dict['pos_E_Ecal_low'] ) &
+        (df['pos_Pz'] > QualCuts_dict['pos_Pz_low']  ) &
+        (df['pos_Px'] > QualCuts_dict['pos_Px_low']  ) &
+        (df['pos_Py'] > QualCuts_dict['pos_Py_low'] ) & (df['pos_Py'] < QualCuts_dict['pos_Py_high'] ) &
+        (df['ele_Px'] > QualCuts_dict['ele_Px_low'] ) &
+        (df['ele_Py'] > QualCuts_dict['ele_Py_low'] ) & (df['ele_Py'] < QualCuts_dict['ele_Py_high'] ) &
+        (df['pos_Ecal_x'] > QualCuts_dict['pos_Ecal_x_low'] ) &
+        (df['pos_Ecal_y'] > QualCuts_dict['pos_Ecal_y_low'] ) & (df['pos_Ecal_y'] < QualCuts_dict['pos_Ecal_y_high'] ) &
+        (df['pos_Ecal_z'] > QualCuts_dict['pos_Ecal_z_low'] ) &
+        (df['ele_Ecal_x'] < QualCuts_dict['ele_Ecal_x_high'] ) &
+        ((df['ele_Ecal_z'] > QualCuts_dict['ele_Ecal_z_low'] ) | (df['ele_Ecal_z'] < 0))
     )
     return mask
 
 
-QualCuts = {
+QualCuts_dict = {
     'pos_E_Ecal_low': 0.5,
     'pos_Pz_low': 0.65,
     'pos_Px_low': -0.06,
@@ -224,13 +232,15 @@ for index, row in df_ANN_selections.iterrows():
 
         if QualCuts:
             # Apply Quality Cuts
-            df = df.loc[getmask(df, QualCuts)].reset_index(drop=True)
+            df = df.loc[getmask(df, QualCuts_dict)].reset_index(drop=True)
 
-        # Get InvM
+        # Get InvM and raw pos_E_Ecal before scaling
         InvM = mytools.get_InvM(df)
-        
-        # Scale the data 
-        df  = pd.DataFrame(scaler.transform(df),      columns=df.columns,  index=df.index)
+        pos_E_Ecal_raw = df['pos_E_Ecal'].to_numpy()
+
+        # Scale the data (replace sentinels before transforming)
+        df[SENTINEL_COLS] = df[SENTINEL_COLS].replace(-9999.0, np.nan)
+        df  = pd.DataFrame(pipeline.transform(df),    columns=df.columns,  index=df.index)
 
         # Setup dataloader
         test_dataset = TensorDataset(torch.from_numpy(df.to_numpy().astype(np.float32)))
@@ -239,17 +249,14 @@ for index, row in df_ANN_selections.iterrows():
         ANN_pred = mytools.test_clas(test_loader, ANN, device)
         ANN_pred = torch.sigmoid(torch.tensor(ANN_pred)).numpy()
 
-        # append ANN preds to model
-        df['ANN_pred'] = ANN_pred
-
-        df = df [df.ANN_pred > ANN_selection]
-
-        df['InvM'] = mytools.get_InvM(df)
+        InvM =  InvM[ANN_pred > ANN_selection]
+        pos_E_Ecal_raw = pos_E_Ecal_raw[ANN_pred > ANN_selection]
+        ANN_pred = ANN_pred[ANN_pred > ANN_selection]
 
         # Append to overall arrays
-        model_preds = np.concatenate((model_preds, df['ANN_pred'].to_numpy()), axis=0)
-        InvMs = np.concatenate((InvMs, df['InvM'].to_numpy()), axis=0)
-        pEcals = np.concatenate((pEcals, df['pos_E_Ecal'].to_numpy()), axis=0)
+        model_preds = np.concatenate((model_preds, ANN_pred), axis=0)
+        InvMs = np.concatenate((InvMs, InvM), axis=0)
+        pEcals = np.concatenate((pEcals, pos_E_Ecal_raw), axis=0)
     
     # Save the predictions and InvM to a pickle file
     out_df = pd.DataFrame({'InvM': InvMs, 'ANN_pred': model_preds, 'pos_E_Ecal': pEcals})

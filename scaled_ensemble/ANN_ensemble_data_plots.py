@@ -18,7 +18,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print("Using device:", device)
 
 
-FakeGen = False
+FakeGen = True
 QualCuts = False
 Early = True
 
