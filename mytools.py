@@ -9,7 +9,10 @@ import pandas as pd
 m_K = 0.493677
 
 # compute adversary labels from dataframe
-def get_InvM(df):
+def get_InvM(df, scaler=None):
+
+    if scaler is not None:
+        df = pd.DataFrame(scaler.inverse_transform(df), columns=df.columns, index=df.index)
 
     # Create temporary dataframe and compute invariant mass
     df_temp = pd.DataFrame()
@@ -19,7 +22,6 @@ def get_InvM(df):
     df_temp['p_SVT_E_K'] = m_K / np.sqrt ( 1 - ( df_temp.p_Ptot**2 / (df_temp.p_Ptot**2  + m_K**2) ) )
     df_temp['M'] = np.sqrt((df_temp.e_SVT_E_K+df_temp.p_SVT_E_K)**2 - (df.ele_Px+df.pos_Px)**2 - (df.ele_Py+df.pos_Py)**2 - (df.ele_Pz+df.pos_Pz)**2)
 
-    # Return a one-hot encoding of the quantile bins
     return df_temp.M.to_numpy()
 
 def get_one_hot_edges(vals, n_bins=5):
