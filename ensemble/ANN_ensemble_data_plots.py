@@ -17,7 +17,27 @@ import re
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print("Using device:", device)
 
-data_dir = '/Users/mghrear/data/HPS_data/ensemble_QualCuts_2/'
+
+FakeGen = True
+QualCuts = False
+Early = True
+
+if FakeGen:
+    str1 = 'FakeGen_1pt05_kaon'
+else:
+    str1 = 'phiKK'
+
+if QualCuts:
+    str2 = '_QualCuts'
+else:
+    str2 = '_limited'
+
+
+if Early:
+    data_dir = '/Users/mghrear/data/HPS_data/scaled/ensemble_NHP1_early'+str2+'_'+str1+'/'
+else: 
+    data_dir = '/Users/mghrear/data/HPS_data/scaled/ensemble_NHP1'+str2+'_'+str1+'/'
+
 
 for p in Path(data_dir).iterdir():
 
@@ -35,6 +55,9 @@ for p in Path(data_dir).iterdir():
         plt.ylabel('Normalized Entries')
     plt.axvline(1019.461, color='k', linestyle='dashed', linewidth=1, label='PDG phi mass')
     plt.legend()
-    plt.savefig('/Users/mghrear/Desktop/Ensemble_study/original_QualCuts_2/data_plots/'+str(run_number)+'.png')
+    if Early:
+        plt.savefig('/Users/mghrear/Desktop/Ensemble_study/NHP1_scaled/'+str1+str2+'_early/data_plots/'+str(run_number)+'.png')
+    else:
+        plt.savefig('/Users/mghrear/Desktop/Ensemble_study/NHP1_scaled/'+str1+str2+'/data_plots/'+str(run_number)+'.png')
 
 
