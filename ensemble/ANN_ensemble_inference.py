@@ -7,258 +7,244 @@ import torch.nn.functional as F
 from torch.utils.data import TensorDataset, DataLoader
 import sklearn
 from sklearn.model_selection import train_test_split
+from sklearn.impute import SimpleImputer
+from sklearn.pipeline import Pipeline
 import copy
+import sys, pathlib
+sys.path.insert(0, str(pathlib.Path(__file__).parent.parent))
 import mytools
-from pathlib import Path
-import joblib 
-import re
+import joblib
 from sklearn.preprocessing import StandardScaler
 from sklearn.impute import SimpleImputer
 from sklearn.pipeline import Pipeline
 
-# Print and store device being used
+# device
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print("Using device:", device)
 
 
 FakeGen = False
-QualCuts = True
-Early = False
-
-if FakeGen:
-    str1 = 'FakeGen_1pt05_kaon'
-else:
-    str1 = 'phiKK'
-
-if QualCuts:
-    str2 = '_QualCuts'
-else:
-    str2 = '_limited'
+model_dir = '/Users/mghrear/data/ML_data/2019_pass2/models/scaled_ensemble/'
 
 
-# Apply to MC to determine a selection that removes 99% of background
+QualCuts = {
+    'pos_E_Ecal_low': 0.6,
+    'pos_Px_low': -0.06,
+    'ele_Ecal_z_low': 1448.6,
+    'ele_Ecal_y_low': -85.0,
+    'ele_Ecal_y_high': 85.0,
+}
 
-# Read MC tritrig, wab, phiKK, and data files
-df_tritrig = pd.read_pickle('/Users/mghrear/data/ML_data/patch/2021_v9_pass5_tritrig'+str2+'.pk')
+
+df_tritrig = pd.read_pickle('/Users/mghrear/data/ML_data/2019_pass2/scaled/2019_pass2_tritrig.pk')
 df_tritrig['PhiKK'] = 0.0
-df_phiKK = pd.read_pickle('/Users/mghrear/data/ML_data/patch/2021_v9_pass5_'+str1+str2+'.pk')
-df_phiKK['PhiKK'] = 1.0
-df_wab = pd.read_pickle('/Users/mghrear/data/ML_data/patch/2021_v9_pass5_wab'+str2+'.pk')
+df_wab = pd.read_pickle('/Users/mghrear/data/ML_data/2019_pass2/scaled/2019_pass2_wab.pk')
 df_wab['PhiKK'] = 0.0 # Add label
+if FakeGen:
+    df_phiKK = pd.read_pickle('/Users/mghrear/data/ML_data/2019_pass2/scaled/2019_pass2_FakeGen_1pt05_kaon.pk')
+else:
+    df_phiKK = pd.read_pickle('/Users/mghrear/data/ML_data/2019_pass2/scaled/2019_pass2_phiKK.pk')
+df_phiKK['PhiKK'] = 1.0
 
-# Number of class in invariant mass used by the adversary
-Num_classes = 10
+df_data = pd.read_pickle('/Users/mghrear/data/ML_data/2019_pass2/scaled/2019_pass2_data_full.pk')
 
- # Make Training set with 20000 tritrig, 4000 phiKK, 4000 wab
-tritrig_train = df_tritrig[0:20000]
-wab_train = df_wab[0:3000]
-phiKK_train = df_phiKK[0:3000]
 
-# Combine and shuffle all training data
-df_train = pd.concat([tritrig_train, phiKK_train, wab_train], ignore_index=True, sort=False)
-df_train = df_train.sample(frac=1, random_state=42).reset_index(drop=True)
-
-# Get edges in invariant mass classes for one-hot encoding
-# To be used for adverserial labels
-# The edges are chosen such that each bin has equal number of background events
-one_hot_edges = mytools.get_one_hot_edges(mytools.get_InvM( pd.concat([df_tritrig, df_wab], ignore_index=True, sort=False) ), n_bins=Num_classes)
-
-# Split the training data into training and validation sets
-df_train, df_val = train_test_split(df_train, test_size=0.33, random_state=42)
-
-# Make X and y for training and validation sets
-# the adverserial network has its own labels
-X_train = df_train.drop(columns=['PhiKK'])
-y_train = df_train['PhiKK']
-y_adv_train = mytools.get_adv_labels( mytools.get_InvM(df_train), one_hot_edges)
-X_val = df_val.drop(columns=['PhiKK'])
-y_val = df_val['PhiKK']
-y_adv_val = mytools.get_adv_labels( mytools.get_InvM(df_val), one_hot_edges)
-
-# Make testing set with remaining events
-tritrig_test = df_tritrig[20000:]
+# Make MC test set
+# MUST BE CONSISTENT with BDT.ipynb and ANN.ipynb to avoid data leaks!!
+tritrig_test = df_tritrig[50000:]
 tritrig_test['type']= 'tritrig'
-wab_test = df_wab[3000:]
+wab_test = df_wab[6000:]
 wab_test['type']= 'wab'
-phiKK_test = df_phiKK[3000:]
+phiKK_test = df_phiKK[5000:]
 phiKK_test['type']= 'phiKK'
 
 df_test = pd.concat([tritrig_test, phiKK_test,wab_test], ignore_index=True, sort=False)
 df_test = df_test.sample(frac=1, random_state=42).reset_index(drop=True) # Now shuffle the combined dataframe
 
 X_test = df_test.drop(columns=['PhiKK','type'])
-y_test = df_test['PhiKK']
-y_adv_test = mytools.get_adv_labels( mytools.get_InvM(df_test), one_hot_edges)
+Y_test = df_test['PhiKK']
 
-df_test["InvM"] = mytools.get_InvM(df_test)
+# Make data set
+X_final = df_data
+
 
 SENTINEL_COLS = ['ele_Ecal_x', 'ele_Ecal_y', 'ele_Ecal_z']
-for df in [X_train, X_val, X_test]:
-    df[SENTINEL_COLS] = df[SENTINEL_COLS].replace(-9999.0, np.nan)
 
-pipeline = Pipeline([
-    ('imputer', SimpleImputer(strategy='mean')),
-    ('scaler',  StandardScaler()),
-])
-X_train = pd.DataFrame(pipeline.fit_transform(X_train), columns=X_train.columns, index=X_train.index)
-X_val   = pd.DataFrame(pipeline.transform(X_val),       columns=X_val.columns,   index=X_val.index)
-X_test  = pd.DataFrame(pipeline.transform(X_test),      columns=X_test.columns,  index=X_test.index)
+# Load the fitted pipeline (imputer + scaler) saved by ANN_NHP1.ipynb
+pipeline = joblib.load("/Users/mghrear/data/ML_data/2019_pass2/scaler_2019_pass2.pkl")
 
-test_dataset = TensorDataset(torch.from_numpy(X_test.to_numpy().astype(np.float32)) )
-test_loader = DataLoader(test_dataset, batch_size=2000, shuffle=False)
+# Create scaled copies for neural network inference
+# BDT uses the original unscaled X_test / X_final
+X_test_nn = X_test.copy()
+X_test_nn[SENTINEL_COLS] = X_test_nn[SENTINEL_COLS].replace(-9999.0, np.nan)
+X_test_nn = pd.DataFrame(pipeline.transform(X_test_nn), columns=X_test_nn.columns, index=X_test_nn.index)
 
-if Early:
-    model_dir = '/Users/mghrear/data/ML_data/patch/scaled/ensemble_NHP1_early'+str2+'_'+str1+'/'
-else: 
-    model_dir = '/Users/mghrear/data/ML_data/patch/scaled/ensemble_NHP1'+str2+'_'+str1+'/'
+X_final_nn = X_final.copy()
+X_final_nn[SENTINEL_COLS] = X_final_nn[SENTINEL_COLS].replace(-9999.0, np.nan)
+X_final_nn = pd.DataFrame(pipeline.transform(X_final_nn), columns=X_final_nn.columns, index=X_final_nn.index)
 
-ANN_slections = []
-run_numbers = []
 
-for p in Path(model_dir).iterdir():
 
-    # Load model
-    m = re.search(r'run(\d+)', model_dir+p.name)
-    run_number = int(m.group(1))
-    print("loading model: ", run_number)
-    run_numbers.append(run_number)
+for seed in np.arange(32,101,1):
+    print("loading model: ", seed)
 
     ANN = mytools.Classifier(in_features=X_test.shape[1]).to(device)
-    ANN.load_state_dict(torch.load(model_dir+p.name, map_location=device))
+    if FakeGen:
+        ANN.load_state_dict(torch.load(model_dir+"FakeGen_classifier_adv_2019_pass2_run"+str(seed)+".pt", map_location=device))
+    else:
+        ANN.load_state_dict(torch.load(model_dir+"classifier_adv_2019_pass2_run"+str(seed)+".pt", map_location=device))
     ANN.eval()
 
-    #Inference step
+    # Get model predictions
+    test_dataset = TensorDataset(torch.from_numpy(X_test_nn.to_numpy().astype(np.float32)) )
+    test_loader = DataLoader(test_dataset, batch_size=2000, shuffle=False)
+    final_dataset = TensorDataset(torch.from_numpy(X_final_nn.to_numpy().astype(np.float32)) )
+    final_loader = DataLoader(final_dataset, batch_size=2000, shuffle=False)
+
     ANN_pred = mytools.test_final(test_loader, ANN, device)
     ANN_pred=torch.sigmoid(torch.tensor(ANN_pred)).numpy()
+
+    ANN_pred_final = mytools.test_final(final_loader, ANN, device)
+    ANN_pred_final=torch.sigmoid(torch.tensor(ANN_pred_final)).numpy()
+
+
     df_test['ANN'] = ANN_pred
+    df_test['InvM'] = mytools.get_InvM(df_test)
+
+    df_data['ANN'] = ANN_pred_final
+    df_data['InvM'] = mytools.get_InvM(df_data)
+
+
+    # Save the results
+    if FakeGen:
+        df_data.to_pickle('/Users/mghrear/data/ML_data/2019_pass2/ensemble_results/inference/scaled/2019_pass2_data_full_FakeGen_run'+str(seed)+'.pk')
+    else:
+        df_data.to_pickle('/Users/mghrear/data/ML_data/2019_pass2/ensemble_results/inference/scaled/2019_pass2_data_full_run'+str(seed)+'.pk')
+
+    # Now make a data / MC comparison plot 
 
     # Split into tritrig, wab, background and phiKK dataframes
     test_df_tritrig = df_test[df_test['type']=="tritrig"].reset_index(drop=True)
     test_df_phiKK = df_test[df_test['type']=="phiKK"].reset_index(drop=True)
     test_df_wab = df_test[df_test['type']=="wab"].reset_index(drop=True)
-    test_df_bkg = pd.concat([test_df_tritrig,test_df_wab]).reset_index(drop=True)
+    test_df_bkg = pd.concat([test_df_tritrig,test_df_wab])
 
+    # Combine dfs according to expected proportions 1470:228:1 (tritrig:wab:phiKK)
+    # Binding constraint: floor(len(test_df_wab) / 228) = floor(10422/228) = 45
+    k = min(len(test_df_tritrig) // 1470, len(test_df_wab) // 228, len(test_df_phiKK) // 1)
+    n_tritrig, n_wab, n_phiKK = 1470 * k, 228 * k, 1 * k
+    print(f"k={k}  tritrig={n_tritrig}  wab={n_wab}  phiKK={n_phiKK}  total={n_tritrig+n_wab+n_phiKK}")
 
-    ANN_selection = np.percentile(test_df_bkg['ANN'],[99.9])[0]
-    print("ANN selection at 99.9% background rejection: ", ANN_selection)
-    ANN_slections.append(ANN_selection)
-
-    #Make mc plots
-    plt.figure()
-    for sel in np.percentile(test_df_bkg['ANN'],[0,10,20,30,40,50,60,70,80,90,99]):
-
-        df_tritrig_cut = test_df_bkg[test_df_bkg['ANN']>sel].reset_index(drop=True)
-        x_vals = 1000*df_tritrig_cut.InvM
-        plt.hist(x_vals, bins=np.arange(980,1250,1), histtype='step', label=f'ANN > {sel:.4f}', density=True)
-
-    plt.axvline(1019.461, color='k', linestyle='dashed', linewidth=1, label='PDG phi mass')
-    plt.xlabel('Invariant Mass [MeV]')
-    plt.ylabel('Normalized Counts')
-    plt.legend()
-    if Early:
-        plt.savefig(f'/Users/mghrear/Desktop/Ensemble_study/NHP1_scaled/'+str1+str2+'_early/MC_plots/ANN_ensemble_run'+str(run_number)+'_mc_invmass.png')
-    else:
-        plt.savefig(f'/Users/mghrear/Desktop/Ensemble_study/NHP1_scaled/'+str1+str2+'/MC_plots/ANN_ensemble_run'+str(run_number)+'_mc_invmass.png')
-
-
-# make pandas dataframe to store run numbers and selections
-df_ANN_selections = pd.DataFrame({'run_number': run_numbers, 'ANN_selection': ANN_slections})
-
-
-# Now apply to the 5% data
-
-
-data_dir = '/Users/mghrear/data/HPS_data/2021_v9_pass5_processed/'
-
-if Early:
-    out_dir = '/Users/mghrear/data/HPS_data/scaled/ensemble_NHP1_early'+str2+'_'+str1+'/'
-else: 
-    out_dir = '/Users/mghrear/data/HPS_data/scaled/ensemble_NHP1'+str2+'_'+str1+'/'
-
-def getmask(df, QualCuts_dict):
-    mask = (
-        (df['pos_E_Ecal'] > QualCuts_dict['pos_E_Ecal_low'] ) &
-        (df['pos_Pz'] > QualCuts_dict['pos_Pz_low']  ) &
-        (df['pos_Px'] > QualCuts_dict['pos_Px_low']  ) &
-        (df['pos_Py'] > QualCuts_dict['pos_Py_low'] ) & (df['pos_Py'] < QualCuts_dict['pos_Py_high'] ) &
-        (df['ele_Px'] > QualCuts_dict['ele_Px_low'] ) &
-        (df['ele_Py'] > QualCuts_dict['ele_Py_low'] ) & (df['ele_Py'] < QualCuts_dict['ele_Py_high'] ) &
-        (df['pos_Ecal_x'] > QualCuts_dict['pos_Ecal_x_low'] ) &
-        (df['pos_Ecal_y'] > QualCuts_dict['pos_Ecal_y_low'] ) & (df['pos_Ecal_y'] < QualCuts_dict['pos_Ecal_y_high'] ) &
-        (df['pos_Ecal_z'] > QualCuts_dict['pos_Ecal_z_low'] ) &
-        (df['ele_Ecal_x'] < QualCuts_dict['ele_Ecal_x_high'] ) &
-        ((df['ele_Ecal_z'] > QualCuts_dict['ele_Ecal_z_low'] ) | (df['ele_Ecal_z'] < 0))
+    df_test_combined = pd.concat(
+        [test_df_tritrig.iloc[:n_tritrig], test_df_wab.iloc[:n_wab], test_df_phiKK.iloc[:n_phiKK]],
+        ignore_index=True, sort=False
     )
-    return mask
 
 
-QualCuts_dict = {
-    'pos_E_Ecal_low': 0.5,
-    'pos_Pz_low': 0.65,
-    'pos_Px_low': -0.06,
-    'pos_Py_low': -0.12,
-    'pos_Py_high': 0.13,
-    'ele_Px_low': -0.12,
-    'ele_Py_low': -0.14,
-    'ele_Py_high': 0.16,
-    'pos_Ecal_x_low': 100.0,
-    'pos_Ecal_y_low': -85.0,
-    'pos_Ecal_y_high': 90.0,
-    'pos_Ecal_z_low': 1448.6,
-    'ele_Ecal_x_high': 10.0,
-    'ele_Ecal_z_low': 1448.6
-}
+    bins = np.arange(0,1.01,0.01)
 
-# loop though dataframe
-for index, row in df_ANN_selections.iterrows():
-    run_number = int(row['run_number'])
-    ANN_selection = row['ANN_selection']
-    print(f'Run number: {run_number}, ANN selection: {ANN_selection}')
-
-    # Load the correspinding model
-    ANN = mytools.Classifier(in_features=X_test.shape[1]).to(device)
-    ANN.load_state_dict(torch.load( model_dir+'classifier_adv_2021_v9_pass5_run'+str(run_number)+'_limited.pt' , map_location=device))
-    ANN.eval()
-
-    model_preds = np.array([])
-    InvMs = np.array([])
-    pEcals = np.array([])
+    mc   = df_test_combined['ANN'].to_numpy()
+    data = df_data['ANN'].to_numpy()
+    sig = test_df_phiKK['ANN'].to_numpy()
 
 
-    for p in Path(data_dir).iterdir():
+    # Use counts (not density) to form the ratio correctly
+    mc_counts,   edges = np.histogram(mc,   bins=bins)
+    data_counts, _     = np.histogram(data, bins=bins)
 
-        # Load dataframe
-        df = pd.read_pickle(data_dir+p.name)
+    mc_scale = data_counts.sum() / mc_counts.sum()
 
-        if QualCuts:
-            # Apply Quality Cuts
-            df = df.loc[getmask(df, QualCuts_dict)].reset_index(drop=True)
+    centers = 0.5*(edges[:-1] + edges[1:])
 
-        # Get InvM and raw pos_E_Ecal before scaling
-        InvM = mytools.get_InvM(df)
-        pos_E_Ecal_raw = df['pos_E_Ecal'].to_numpy()
+    ratio = np.divide(data_counts, mc_counts * mc_scale,
+                    out=np.full_like(data_counts, np.nan, dtype=float),
+                    where=mc_counts > 0)
 
-        # Scale the data (replace sentinels before transforming)
-        df[SENTINEL_COLS] = df[SENTINEL_COLS].replace(-9999.0, np.nan)
-        df  = pd.DataFrame(pipeline.transform(df),    columns=df.columns,  index=df.index)
+    fig, (ax_top, ax_bot) = plt.subplots(
+        2, 1, sharex=True, figsize=(8, 6),
+        gridspec_kw={"height_ratios": [3, 1], "hspace": 0.05}
+    )
 
-        # Setup dataloader
-        test_dataset = TensorDataset(torch.from_numpy(df.to_numpy().astype(np.float32)))
-        test_loader = DataLoader(test_dataset, batch_size=2000, shuffle=False)
+    # --- Top: MC scaled to match data total events ---
+    ax_top.hist(mc,   bins=bins, histtype='step', density=False, weights=np.full(len(mc), mc_scale), label='MC (scaled)')
+    ax_top.hist(data, bins=bins, histtype='step', density=False, label='data')
+    ax_top.hist(sig, bins=bins, histtype='step', label='Signal')
 
-        ANN_pred = mytools.test_clas(test_loader, ANN, device)
-        ANN_pred = torch.sigmoid(torch.tensor(ANN_pred)).numpy()
+    ax_top.set_ylabel('Count')
+    ax_top.set_yscale('log')
+    ax_top.legend()
 
-        InvM =  InvM[ANN_pred > ANN_selection]
-        pos_E_Ecal_raw = pos_E_Ecal_raw[ANN_pred > ANN_selection]
-        ANN_pred = ANN_pred[ANN_pred > ANN_selection]
+    # --- Bottom: data / scaled MC ratio ---
+    ax_bot.step(centers, ratio, where='mid', color='k')
+    ax_bot.grid(True)
+    ax_bot.set_ylabel('data / MC (scaled)')
+    ax_bot.set_xlabel('ANN Output')
+    ax_bot.axhline(y=1, color='k', linestyle='--')
+    ax_bot.set_ylim(0, 10)  # adjust as you like
+    if FakeGen:
+        plt.savefig('/Users/mghrear/data/ML_data/2019_pass2/ensemble_results/plots/scaled/data_mc_comparison/'+'data_mc_comparison_FakeGen_run'+str(seed)+'.png')
+    else:
+        plt.savefig('/Users/mghrear/data/ML_data/2019_pass2/ensemble_results/plots/scaled/data_mc_comparison/'+'data_mc_comparison_run'+str(seed)+'.png')
 
-        # Append to overall arrays
-        model_preds = np.concatenate((model_preds, ANN_pred), axis=0)
-        InvMs = np.concatenate((InvMs, InvM), axis=0)
-        pEcals = np.concatenate((pEcals, pos_E_Ecal_raw), axis=0)
-    
-    # Save the predictions and InvM to a pickle file
-    out_df = pd.DataFrame({'InvM': InvMs, 'ANN_pred': model_preds, 'pos_E_Ecal': pEcals})
-    out_df.to_pickle(out_dir+f'ANN_ensemble_run{run_number}_selected.pk')
 
+    df_data_Qual = df_data[
+        (df_data.pos_E_Ecal > QualCuts['pos_E_Ecal_low']) &
+        (df_data.pos_Px > QualCuts['pos_Px_low']) &
+        ( (df_data.ele_Ecal_z > QualCuts['ele_Ecal_z_low']) | (df_data['ele_Ecal_z'] < 0)) &
+        (df_data.ele_Ecal_y > QualCuts['ele_Ecal_y_low']) &
+        (df_data.ele_Ecal_y < QualCuts['ele_Ecal_y_high'])
+    ]
+
+    df_test_combined_Qual = df_test_combined[
+        (df_test_combined.pos_E_Ecal > QualCuts['pos_E_Ecal_low']) &
+        (df_test_combined.pos_Px > QualCuts['pos_Px_low']) &
+        ( (df_test_combined.ele_Ecal_z > QualCuts['ele_Ecal_z_low']) | (df_test_combined['ele_Ecal_z'] < 0)) &
+        (df_test_combined.ele_Ecal_y > QualCuts['ele_Ecal_y_low']) &
+        (df_test_combined.ele_Ecal_y < QualCuts['ele_Ecal_y_high'])
+    ]
+
+
+    bins = np.arange(0, 1.01, 0.01)
+
+    mc_ann_cut   = df_test_combined_Qual['ANN'].to_numpy()
+    data_ann_cut = df_data_Qual['ANN'].to_numpy()
+    sig = test_df_phiKK['ANN'].to_numpy()
+
+
+    mc_counts,   edges = np.histogram(mc_ann_cut,   bins=bins)
+    data_counts, _     = np.histogram(data_ann_cut, bins=bins)
+
+    mc_scale = data_counts.sum() / mc_counts.sum()
+
+    centers = 0.5 * (edges[:-1] + edges[1:])
+
+    ratio = np.divide(data_counts, mc_counts * mc_scale,
+                    out=np.full_like(data_counts, np.nan, dtype=float),
+                    where=mc_counts > 0)
+
+    fig, (ax_top, ax_bot) = plt.subplots(
+        2, 1, sharex=True, figsize=(8, 6),
+        gridspec_kw={"height_ratios": [3, 1], "hspace": 0.05}
+    )
+
+    ax_top.hist(mc_ann_cut,   bins=bins, histtype='step', density=False, weights=np.full(len(mc_ann_cut), mc_scale), label='MC (scaled)')
+    ax_top.hist(data_ann_cut, bins=bins, histtype='step', density=False, label='data')
+    ax_top.hist(sig, bins=bins, histtype='step', label='Signal')
+    ax_top.set_ylabel('Count')
+    ax_top.set_yscale('log')
+    ax_top.set_title('ANN Output after quality cuts')
+    ax_top.legend()
+
+    ax_bot.step(centers, ratio, where='mid', color='k')
+    ax_bot.axhline(y=1, color='k', linestyle='--')
+    ax_bot.grid(True)
+    ax_bot.set_ylabel('data / MC (scaled)')
+    ax_bot.set_xlabel('ANN Output')
+    ax_bot.set_ylim(0, 10)
+
+    plt.tight_layout()
+
+    if FakeGen:
+        plt.savefig('/Users/mghrear/data/ML_data/2019_pass2/ensemble_results/plots/scaled/data_mc_comparison/'+'data_mc_comparison_QualCuts_FakeGen_run'+str(seed)+'.png')
+    else:
+        plt.savefig('/Users/mghrear/data/ML_data/2019_pass2/ensemble_results/plots/scaled/data_mc_comparison/'+'data_mc_comparison_QualCuts_run'+str(seed)+'.png')

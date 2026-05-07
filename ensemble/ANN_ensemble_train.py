@@ -84,9 +84,8 @@ for seed in np.arange(100)+ 1:
     df_train = df_train.sample(frac=1, random_state=42).reset_index(drop=True)
 
     # Get edges in invariant mass classes for one-hot encoding
-    # To be used for adverserial labels
-    # The edges are chosen such that each bin has equal number of background events
-    one_hot_edges = mytools.get_one_hot_edges(mytools.get_InvM( pd.concat([df_tritrig, df_wab], ignore_index=True, sort=False) ), n_bins=Num_classes)
+    one_hot_edges = np.load("/Users/mghrear/Lab/HPS/pivoting-ANN/one_hot_edges.npy")
+
 
     # Split the training data into training and validation sets
     df_train, df_val = train_test_split(df_train, test_size=0.33, random_state=42)
@@ -247,6 +246,6 @@ for seed in np.arange(100)+ 1:
             final_adv_adv = copy.deepcopy(final_adv)
 
     if FakeGen:
-        torch.save(final_clas_adv.state_dict(), out_dir+"FakeGen_classifier_adv_2019_pass2_run"+str(seed)+"_scaled.pt")
+        torch.save(final_clas_adv.state_dict(), out_dir+"FakeGen_classifier_adv_2019_pass2_run"+str(seed)+".pt")
     else:
-        torch.save(final_clas_adv.state_dict(), out_dir+"classifier_adv_2019_pass2_run"+str(seed)+"_scaled.pt")
+        torch.save(final_clas_adv.state_dict(), out_dir+"classifier_adv_2019_pass2_run"+str(seed)+".pt")
