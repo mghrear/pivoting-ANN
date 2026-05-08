@@ -23,7 +23,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print("Using device:", device)
 
 
-FakeGen = False
+FakeGen = True
 model_dir = '/Users/mghrear/data/ML_data/2019_pass2/models/scaled_ensemble/'
 
 
