@@ -85,7 +85,7 @@ X_final_nn = pd.DataFrame(pipeline.transform(X_final_nn), columns=X_final_nn.col
 
 
 
-for seed in np.arange(32,101,1):
+for seed in np.arange(1,101,1):
     print("loading model: ", seed)
 
     ANN = mytools.Classifier(in_features=X_test.shape[1]).to(device)
