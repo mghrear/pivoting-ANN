@@ -109,7 +109,7 @@ for run in np.arange(1,101,1):
 
 
     plt.figure()
-    for n_events in [200000, 100000, 50000, 20000, 10000]:
+    for n_events in [40000, 20000, 10000, 5000, 2500]:
         ANN_selection = np.quantile(df_data['ANN'], 1 - n_events / len(df_data))
         df_data_cut = df_data[df_data['ANN'] > ANN_selection].reset_index(drop=True)
         x_vals = 1000 * df_data_cut.InvM
@@ -133,7 +133,7 @@ for run in np.arange(1,101,1):
     ]
 
     plt.figure()
-    for n_events in [200000, 100000, 50000, 20000, 10000]:
+    for n_events in [40000, 20000, 10000, 5000, 2500]:
         ANN_selection = np.quantile(df_data_Qual['ANN'], 1 - n_events / len(df_data_Qual))
         df_data_cut = df_data_Qual[df_data_Qual['ANN'] > ANN_selection].reset_index(drop=True)
         x_vals = 1000 * df_data_cut.InvM
