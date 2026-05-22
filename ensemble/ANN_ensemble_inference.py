@@ -23,7 +23,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print("Using device:", device)
 
 
-FakeGen = True
+FakeGen = False
 model_dir = '/Users/mghrear/data/ML_data/2019_pass2/models/scaled_ensemble/'
 
 
@@ -114,12 +114,15 @@ for seed in np.arange(1,101,1):
     df_data['ANN'] = ANN_pred_final
     df_data['InvM'] = mytools.get_InvM(df_data)
 
+    ANN_selection = np.percentile(df_data['ANN'], 90)
 
-    # Save the results
+    # Save the results (events passing ANN selection only)
+    df_data_cut = df_data[df_data['ANN'] > ANN_selection].reset_index(drop=True)
     if FakeGen:
-        df_data.to_pickle('/Users/mghrear/data/ML_data/2019_pass2/ensemble_results/inference/scaled/2019_pass2_data_full_FakeGen_run'+str(seed)+'.pk')
+        df_data_cut.to_pickle('/Users/mghrear/data/ML_data/2019_pass2/ensemble_results/inference/scaled/2019_pass2_data_full_FakeGen_run'+str(seed)+'.pk')
     else:
-        df_data.to_pickle('/Users/mghrear/data/ML_data/2019_pass2/ensemble_results/inference/scaled/2019_pass2_data_full_run'+str(seed)+'.pk')
+        df_data_cut.to_pickle('/Users/mghrear/data/ML_data/2019_pass2/ensemble_results/inference/scaled/2019_pass2_data_full_run'+str(seed)+'.pk')
+
 
     # Now make a data / MC comparison plot 
 
