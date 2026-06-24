@@ -22,11 +22,11 @@ print("Using device:", device)
 # Apply to MC to determine a selection that removes 99% of background
 
 # Load MC data
-df_tritrig = pd.read_pickle('/Users/mghrear/data/ML_data/patch/2021_v9_pass5_tritrig_limited.pk')
+df_tritrig = pd.read_pickle('/Users/mghrear/data/ML_data/patch/2021_v9_pass5_TC_tritrig_limited.pk')
 df_tritrig['PhiKK'] = 0.0
-df_phiKK = pd.read_pickle('/Users/mghrear/data/ML_data/patch/2021_v9_pass5_phiKK_limited.pk')
+df_phiKK = pd.read_pickle('/Users/mghrear/data/ML_data/patch/2021_v9_pass5_TC_phiKK_limited.pk')
 df_phiKK['PhiKK'] = 1.0
-df_wab = pd.read_pickle('/Users/mghrear/data/ML_data/patch/2021_v9_pass5_wab_limited.pk')
+df_wab = pd.read_pickle('/Users/mghrear/data/ML_data/patch/2021_v9_pass5_TC_wab_limited.pk')
 df_wab['PhiKK'] = 0.0 # Add label
 
 
@@ -53,7 +53,7 @@ test_dataset = TensorDataset(torch.from_numpy(X_test.to_numpy().astype(np.float3
 test_loader = DataLoader(test_dataset, batch_size=2000, shuffle=False)
 
 
-model_dir = '/Users/mghrear/data/ML_data/patch/ensemble/'
+model_dir = '/Users/mghrear/data/ML_data/patch/ensemble_TC/'
 
 ANN_slections = []
 run_numbers = []
@@ -108,8 +108,8 @@ df_ANN_selections = pd.DataFrame({'run_number': run_numbers, 'ANN_selection': AN
 # Now apply to the 5% data
 
 
-data_dir = '/Users/mghrear/data/HPS_data/2021_v9_pass5_processed/'
-out_dir = '/Users/mghrear/data/HPS_data/ensemble/'
+data_dir = '/Users/mghrear/data/HPS_data/2021_v9_pass5_TC_processed/'
+out_dir = '/Users/mghrear/data/HPS_data/ensemble_TC/'
 
 
 # loop though dataframe

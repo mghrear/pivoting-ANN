@@ -52,11 +52,11 @@ for seed in np.arange(100)+5:
     seed_everything(int(seed))
 
     # Read tritrig, wab, phiKK, and data files
-    df_tritrig = pd.read_pickle('/Users/mghrear/data/ML_data/patch/2021_v9_pass5_tritrig_limited.pk')
+    df_tritrig = pd.read_pickle('/Users/mghrear/data/ML_data/patch/2021_v9_pass5_TC_tritrig_limited.pk')
     df_tritrig['PhiKK'] = 0.0
-    df_phiKK = pd.read_pickle('/Users/mghrear/data/ML_data/patch/2021_v9_pass5_phiKK_limited.pk')
+    df_phiKK = pd.read_pickle('/Users/mghrear/data/ML_data/patch/2021_v9_pass5_TC_phiKK_limited.pk')
     df_phiKK['PhiKK'] = 1.0
-    df_wab = pd.read_pickle('/Users/mghrear/data/ML_data/patch/2021_v9_pass5_wab_limited.pk')
+    df_wab = pd.read_pickle('/Users/mghrear/data/ML_data/patch/2021_v9_pass5_TC_wab_limited.pk')
     df_wab['PhiKK'] = 0.0 # Add label
 
     print("tritrig: ", len(df_tritrig))
@@ -124,7 +124,6 @@ for seed in np.arange(100)+5:
     # Implement early stopping in training loop
     # Stop if validation loss has not decreased for the last [patience] epochs
     # The model with the lowest loss is stored
-    patience = 10
 
     Training_losses = np.array([])
     Validation_losses = np.array([])
@@ -140,10 +139,6 @@ for seed in np.arange(100)+5:
         if Validation_losses[-1] == np.min(Validation_losses):
             final_classifier = copy.deepcopy(clas)
         
-        if len(Validation_losses) > patience:
-            if np.sum((Validation_losses[-1*np.arange(patience)-1] - Validation_losses[-1*np.arange(patience)-2]) < 0) == 0:
-                print("Stopping early!")
-                break
                 
     adv = mytools.Adversary(n_classes=Num_classes).to(device)
     criterion_adv = nn.CrossEntropyLoss(reduction='none')  # returns loss per sample so we can weight it
@@ -160,7 +155,6 @@ for seed in np.arange(100)+5:
     test_adv_dataset = TensorDataset(torch.from_numpy(X_test.to_numpy() .astype(np.float32))  , torch.from_numpy(y_adv_test))
     test_adv_loader = DataLoader(test_adv_dataset, batch_size=bsize, shuffle=True)
 
-    patience = 6
 
     Training_losses = np.array([])
     Validation_losses = np.array([])
@@ -176,10 +170,7 @@ for seed in np.arange(100)+5:
         if Validation_losses[-1] == np.min(Validation_losses):
             final_adv = copy.deepcopy(adv)
         
-        if len(Validation_losses) > patience:
-            if np.sum((Validation_losses[-1*np.arange(patience)-1] - Validation_losses[-1*np.arange(patience)-2]) < 0) == 0:
-                print("Stopping early!")
-                break
+
 
     train_full_dataset = TensorDataset(torch.from_numpy(X_train.to_numpy().astype(np.float32))  , torch.from_numpy(y_train.to_numpy().astype(np.float32)).unsqueeze(1), torch.from_numpy(y_adv_train),  (torch.from_numpy(y_train.to_numpy().astype(np.float32))==0).float())
     train_full_loader = DataLoader(train_full_dataset, batch_size=bsize, shuffle=True)
@@ -231,4 +222,4 @@ for seed in np.arange(100)+5:
             final_clas_adv = copy.deepcopy(final_classifier)
             final_adv_adv = copy.deepcopy(final_adv)
 
-    torch.save(final_clas_adv.state_dict(), "/Users/mghrear/data/ML_data/patch/ensemble/classifier_adv_2021_v9_pass5_run"+str(seed)+"_limited.pt")
+    torch.save(final_clas_adv.state_dict(), "/Users/mghrear/data/ML_data/patch/ensemble_TC/classifier_adv_2021_v9_pass5_TC_run"+str(seed)+".pt")
