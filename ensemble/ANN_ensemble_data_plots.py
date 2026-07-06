@@ -21,7 +21,7 @@ import joblib
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print("Using device:", device)
 
-FakeGen = False
+FakeGen = True
 
 QualCuts = {
     'pos_E_Ecal_low': 0.6,
@@ -147,3 +147,21 @@ for run in np.arange(1,101,1):
         plt.savefig('/Users/mghrear/data/ML_data/2019_pass2/ensemble_results/plots/unscaled/final_qual/2019_pass2_mc_invariance_ANN_qualile_FakeGen_run'+str(run)+'.png')
     else:
         plt.savefig('/Users/mghrear/data/ML_data/2019_pass2/ensemble_results/plots/unscaled/final_qual/2019_pass2_mc_invariance_ANN_qualile_run'+str(run)+'.png')
+
+    df_data_posEcal = df_data[df_data.pos_E_Ecal > QualCuts['pos_E_Ecal_low']]
+
+    plt.figure()
+    for n_events in [160000, 80000, 40000, 20000, 10000, 5000]:
+        ANN_selection = np.quantile(df_data_posEcal['ANN'], 1 - n_events / len(df_data_posEcal))
+        df_data_cut = df_data_posEcal[df_data_posEcal['ANN'] > ANN_selection].reset_index(drop=True)
+        x_vals = 1000 * df_data_cut.InvM
+        plt.hist(x_vals, bins=np.arange(980, 1250, 1), histtype='step', label=f'{n_events:,} events (ANN > {ANN_selection:.3f})')
+
+    plt.axvline(1019.461, color='k', linestyle='dashed', linewidth=1, label='PDG phi mass')
+    plt.xlabel('Invariant Mass [MeV]')
+    plt.ylabel('Counts')
+    plt.legend()
+    if FakeGen:
+        plt.savefig('/Users/mghrear/data/ML_data/2019_pass2/ensemble_results/plots/unscaled/final_qual/2019_pass2_mc_invariance_ANN_qualile_posEcal_FakeGen_run'+str(run)+'.png')
+    else:
+        plt.savefig('/Users/mghrear/data/ML_data/2019_pass2/ensemble_results/plots/unscaled/final_qual/2019_pass2_mc_invariance_ANN_qualile_posEcal_run'+str(run)+'.png')
